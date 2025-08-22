@@ -1,4 +1,2 @@
-cd build
-cmake ..
-make -j
-QT_QPA_PLATFORM=minimal ./qt_oled 0x3D
+g++ main.cpp -o boxionfetch -li2c
+sudo ./boxionfetch 0x3D     
