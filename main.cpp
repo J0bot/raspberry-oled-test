@@ -18,45 +18,60 @@
 #include <thread>
 #include <fstream>
 
-// ====== SSD1306 ======
+// ================= SSD1306 =================
 static constexpr int W=128, H=64, PAGES=H/8;
+
 static int i2c_cmd(int fd, uint8_t c){ uint8_t b[2]={0x00,c}; return write(fd,b,2)==2?0:-1; }
 static int i2c_data(int fd, const uint8_t* d, size_t n){
     uint8_t tmp[128+1]; tmp[0]=0x40; size_t off=0;
-    while(off<n){ size_t k=std::min<size_t>(128,n-off);
-        memcpy(tmp+1,d+off,k); if(write(fd,tmp,k+1)!=(ssize_t)(k+1)) return -1; off+=k; }
+    while(off<n){ size_t k = (n-off>128)?128:(n-off);
+        memcpy(tmp+1,d+off,k);
+        if(write(fd,tmp,k+1)!=(ssize_t)(k+1)) return -1;
+        off+=k;
+    }
     return 0;
 }
 static int ssd1306_init(int fd){
     int r=0;
-    r|=i2c_cmd(fd,0xAE); r|=i2c_cmd(fd,0x20); r|=i2c_cmd(fd,0x00);
-    r|=i2c_cmd(fd,0xB0); r|=i2c_cmd(fd,0xC8);
-    r|=i2c_cmd(fd,0x00); r|=i2c_cmd(fd,0x10);
-    r|=i2c_cmd(fd,0x40);
-    r|=i2c_cmd(fd,0x81); r|=i2c_cmd(fd,0x7F);
-    r|=i2c_cmd(fd,0xA1); r|=i2c_cmd(fd,0xA6);
-    r|=i2c_cmd(fd,0xA8); r|=i2c_cmd(fd,0x3F);
-    r|=i2c_cmd(fd,0xA4);
-    r|=i2c_cmd(fd,0xD3); r|=i2c_cmd(fd,0x00);
-    r|=i2c_cmd(fd,0xD5); r|=i2c_cmd(fd,0x80);
-    r|=i2c_cmd(fd,0xD9); r|=i2c_cmd(fd,0xF1);
-    r|=i2c_cmd(fd,0xDA); r|=i2c_cmd(fd,0x12);
-    r|=i2c_cmd(fd,0xDB); r|=i2c_cmd(fd,0x40);
-    r|=i2c_cmd(fd,0x8D); r|=i2c_cmd(fd,0x14);
-    r|=i2c_cmd(fd,0xAF); return r;
+    r|=i2c_cmd(fd,0xAE);                      // off
+    r|=i2c_cmd(fd,0x20); r|=i2c_cmd(fd,0x00); // horizontal
+    r|=i2c_cmd(fd,0xB0);
+    r|=i2c_cmd(fd,0xC8);                      // COM scan dec
+    r|=i2c_cmd(fd,0x00); r|=i2c_cmd(fd,0x10); // column addr
+    r|=i2c_cmd(fd,0x40);                      // start line
+    r|=i2c_cmd(fd,0x81); r|=i2c_cmd(fd,0x7F); // contrast
+    r|=i2c_cmd(fd,0xA1);                      // seg remap
+    r|=i2c_cmd(fd,0xA6);                      // normal
+    r|=i2c_cmd(fd,0xA8); r|=i2c_cmd(fd,0x3F); // multiplex
+    r|=i2c_cmd(fd,0xA4);                      // display from RAM
+    r|=i2c_cmd(fd,0xD3); r|=i2c_cmd(fd,0x00); // offset
+    r|=i2c_cmd(fd,0xD5); r|=i2c_cmd(fd,0x80); // clock
+    r|=i2c_cmd(fd,0xD9); r|=i2c_cmd(fd,0xF1); // pre-charge
+    r|=i2c_cmd(fd,0xDA); r|=i2c_cmd(fd,0x12); // COM pins
+    r|=i2c_cmd(fd,0xDB); r|=i2c_cmd(fd,0x40); // vcomh
+    r|=i2c_cmd(fd,0x8D); r|=i2c_cmd(fd,0x14); // charge pump
+    r|=i2c_cmd(fd,0xAF);                      // on
+    return r;
 }
 static int ssd1306_blit(int fd, const uint8_t* fb){
     for(int p=0;p<PAGES;++p){
         if(i2c_cmd(fd,0xB0+p)) return -1;
-        if(i2c_cmd(fd,0x00)) return -1;
-        if(i2c_cmd(fd,0x10)) return -1;
+        if(i2c_cmd(fd,0x00))   return -1;
+        if(i2c_cmd(fd,0x10))   return -1;
         if(i2c_data(fd, fb + p*W, W)) return -1;
-    } return 0;
+    }
+    return 0;
 }
 
-// ====== Framebuffer + font 5x7 ======
-struct FB{ uint8_t b[W*PAGES]; void clear(){ memset(b,0,sizeof(b)); }
-    void px(int x,int y){ if((unsigned)x>=W||(unsigned)y>=H) return; b[(y>>3)*W+x] |= (1u<<(y&7)); } };
+// =========== Framebuffer + font 5x7 ===========
+struct FB{
+    uint8_t b[W*PAGES];
+    void clear(){ memset(b,0,sizeof(b)); }
+    void px(int x,int y){
+        if((unsigned)x>=W||(unsigned)y>=H) return;
+        b[(y>>3)*W + x] |= (1u<<(y&7));
+    }
+};
 static const uint8_t F[96][5]={
 {0,0,0,0,0},{0,0,95,0,0},{0,7,0,7,0},{20,127,20,127,20},{36,42,127,42,18},{35,19,8,100,98},{54,73,85,34,80},{0,5,3,0,0},
 {0,28,34,65,0},{0,65,34,28,0},{20,8,62,8,20},{8,8,62,8,8},{0,80,48,0,0},{8,8,8,8,8},{0,96,96,0,0},{32,16,8,4,2},
@@ -73,30 +88,38 @@ static const uint8_t F[96][5]={
 {68,40,16,40,68},{12,80,80,80,60},{68,100,84,76,68},{0,8,54,65,0},{0,0,127,0,0},{0,65,54,8,0},{8,4,8,16,8}
 };
 static void txt(FB& fb,int x,int y,const std::string& s){
-    int cx=x; for(char c: s){ if(c=='\n'){ y+=8; cx=x; continue; }
-        if(c<32||c>127){ cx+=6; continue; } const uint8_t* g=F[c-32];
+    int cx=x;
+    for(char c: s){
+        if(c=='\n'){ y+=8; cx=x; continue; }
+        if(c<32||c>127){ cx+=6; continue; }
+        const uint8_t* g=F[c-32];
         for(int i=0;i<5;i++){ uint8_t col=g[i]; for(int b=0;b<7;b++) if(col&(1<<b)) fb.px(cx+i,y+b); }
-        cx+=6; } }
+        cx+=6;
+    }
+}
 static void rect(FB& fb,int x,int y,int w,int h){
     for(int xx=x;xx<x+w;xx++){ fb.px(xx,y); fb.px(xx,y+h-1); }
     for(int yy=y;yy<y+h;yy++){ fb.px(x,yy); fb.px(x+w-1,yy); }
 }
 
-// ====== Infos ======
+// =============== Infos système ===============
 static std::string ip_iface(const char* ifn){
     struct ifaddrs* ifaddr=nullptr; if(getifaddrs(&ifaddr)==-1) return "-";
     std::string ip="-";
     for(auto* a=ifaddr;a;a=a->ifa_next){
         if(!a->ifa_addr || strcmp(a->ifa_name,ifn)!=0) continue;
-        int fam=a->ifa_addr->sa_family;
-        if(fam==AF_INET){ char h[NI_MAXHOST]; auto* s=(sockaddr_in*)a->ifa_addr;
-            if(inet_ntop(AF_INET,&s->sin_addr,h,sizeof(h))) { ip=h; break; } }
+        if(a->ifa_addr->sa_family==AF_INET){
+            char h[NI_MAXHOST]; auto* s=(sockaddr_in*)a->ifa_addr;
+            if(inet_ntop(AF_INET,&s->sin_addr,h,sizeof(h))) { ip=h; break; }
+        }
     }
-    if(ip=="-"){ // fallback IPv6 si pas d'IPv4
+    if(ip=="-"){ // fallback IPv6
         for(auto* a=ifaddr;a;a=a->ifa_next){
             if(!a->ifa_addr || strcmp(a->ifa_name,ifn)!=0) continue;
-            if(a->ifa_addr->sa_family==AF_INET6){ char h[NI_MAXHOST]; auto* s=(sockaddr_in6*)a->ifa_addr;
-                if(inet_ntop(AF_INET6,&s->sin6_addr,h,sizeof(h))) { ip=h; break; } }
+            if(a->ifa_addr->sa_family==AF_INET6){
+                char h[NI_MAXHOST]; auto* s=(sockaddr_in6*)a->ifa_addr;
+                if(inet_ntop(AF_INET6,&s->sin6_addr,h,sizeof(h))) { ip=h; break; }
+            }
         }
     }
     freeifaddrs(ifaddr); return ip;
@@ -109,17 +132,32 @@ static bool mem_kb(long& total,long& avail){
 }
 static void disk_root_gb(double& used,double& total){
     struct statvfs st{}; if(statvfs("/",&st)!=0){ used=total=0; return; }
-    double b=st.f_frsize; total=(st.f_blocks*b)/(1024.0*1024.0*1024.0);
-    double free=(st.f_bavail*b)/(1024.0*1024.0*1024.0); used=total-free;
+    double b=st.f_frsize;
+    total = (st.f_blocks*b)/(1024.0*1024.0*1024.0);
+    double free = (st.f_bavail*b)/(1024.0*1024.0*1024.0);
+    used = total - free;
 }
-static std::string uptime(){
+static std::string uptime_str(){
     std::ifstream f("/proc/uptime"); double up=0; if(!(f>>up)) return "-";
-    int h=int(up/3600), m=int((up-h*3600)/60); char buf[16];
-    snprintf(buf,sizeof(buf),"%dh%02d",h,m); return buf;
+    int h=int(up/3600), m=int((up-h*3600)/60);
+    char buf[16]; snprintf(buf,sizeof(buf),"%dh%02d",h,m); return buf;
+}
+// vcgencmd get_throttled → PWR: ok / UV / TH / CAP
+static std::string power_flags(){
+    FILE* fp=popen("vcgencmd get_throttled 2>/dev/null","r");
+    if(!fp) return "PWR: n/a";
+    char buf[64]={0}; size_t n=fread(buf,1,sizeof(buf)-1,fp); pclose(fp);
+    unsigned val=0; if(sscanf(buf,"throttled=0x%x",&val)!=1) return "PWR: n/a";
+    bool uv = (val&(1u<<0)) || (val&(1u<<16));
+    bool th = (val&(1u<<1)) || (val&(1u<<17));
+    bool cp = (val&(1u<<2)) || (val&(1u<<18));
+    if(!uv && !th && !cp) return "PWR: ok";
+    std::string s="PWR:"; if(uv) s+=" UV"; if(th) s+=" TH"; if(cp) s+=" CAP"; return s;
 }
 
 int main(int argc,char** argv){
     int addr=0x3C; if(argc>1) addr=int(strtol(argv[1],nullptr,0)); // ex: 0x3D
+
     int fd=open("/dev/i2c-1",O_RDWR);
     if(fd<0){ perror("open /dev/i2c-1"); return 1; }
     if(ioctl(fd,I2C_SLAVE,addr)<0){ perror("ioctl I2C_SLAVE"); return 1; }
@@ -128,24 +166,24 @@ int main(int argc,char** argv){
     FB fb;
     for(;;){
         // collect
-        std::string ip_wifi   = ip_iface("wlan0");
-        std::string ip_boxion = ip_iface("boxion");  // <<— I/F “boxion”
+        std::string ip_wifi = ip_iface("wlan0");
         long mt=0, ma=0; mem_kb(mt,ma);
         double du=0, dt=0; disk_root_gb(du,dt);
-        std::string up = uptime();
+        std::string up = uptime_str();
+        std::string pwr = power_flags();
 
-        // render
+        // render compact
         fb.clear();
         txt(fb,2,0,"BOXION"); rect(fb,0,8,127,55);
         int y=12; char line[40];
-        txt(fb,2,y, "WiFi: " + ip_wifi);            y+=8;
-        txt(fb,2,y, "Box : " + ip_boxion);          y+=8;
+        txt(fb,2,y, "WiFi: " + ip_wifi);                y+=8;
         long used=(mt>0)?(mt-ma):0;
         snprintf(line,sizeof(line),"RAM : %ld/%ld MB", used/1024, mt/1024);
-        txt(fb,2,y,line);                           y+=8;
+        txt(fb,2,y,line);                               y+=8;
         snprintf(line,sizeof(line),"DISK: %.1f/%.1fG", du, dt);
-        txt(fb,2,y,line);                           y+=8;
-        txt(fb,2,y, "UP  : " + up);
+        txt(fb,2,y,line);                               y+=8;
+        txt(fb,2,y,"UP  : " + up);                      y+=8;
+        txt(fb,2,y,pwr);
 
         if(ssd1306_blit(fd, fb.b)!=0){ fprintf(stderr,"blit fail\n"); break; }
         std::this_thread::sleep_for(std::chrono::milliseconds(900));

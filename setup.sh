@@ -1,1 +1,1 @@
-sudo apt install -y build-essential libi2c-dev wireless-tools
+sudo apt install -y build-essential libi2c-dev wireless-tools libraspberrypi-bin
