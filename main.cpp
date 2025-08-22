@@ -74,7 +74,7 @@ int main() {
     const char* dev = "/dev/i2c-1";
     int fd = open(dev, O_RDWR);
     if (fd < 0) { perror("open /dev/i2c-1"); return 1; }
-    int addr = 0x3C;
+    int addr = 0x3D;
     if (ioctl(fd, I2C_SLAVE, addr) < 0) { perror("ioctl I2C_SLAVE"); return 1; }
     if (ssd1306_init(fd) != 0) { fprintf(stderr, "init failed\n"); return 1; }
     ssd1306_clear(fd);
