@@ -1,3 +1,7 @@
+#include <net/if.h>      // IFF_UP
+#include <netdb.h>       // NI_MAXHOST
+#include <arpa/inet.h>   // inet_ntop
+
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
@@ -6,8 +10,10 @@
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <sys/utsname.h>
+#include <net/if.h>
+#include <netdb.h>
 
+#include <sys/utsname.h>
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -17,6 +23,7 @@
 #include <thread>
 #include <fstream>
 #include <sstream>
+
 
 // ====== SSD1306 basics ======
 static constexpr int W=128, H=64, PAGES=H/8;
